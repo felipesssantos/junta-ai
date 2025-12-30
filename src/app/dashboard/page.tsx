@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import Link from 'next/link'
-import { PlusCircle, Wallet, X, Store, Plane, Home, Users, QrCode } from 'lucide-react'
+import { PlusCircle, Wallet, X, Store, Plane, Home, Users, QrCode, User as UserIcon } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import ProfileModal from '../../components/ProfileModal'
 
@@ -21,6 +21,8 @@ export default function Dashboard() {
   const [newPixKey, setNewPixKey] = useState('')
   const [loading, setLoading] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
+  const [userProfile, setUserProfile] = useState<any>(null)
+  const [showProfileEdit, setShowProfileEdit] = useState(false)
 
   const router = useRouter()
 
@@ -33,6 +35,11 @@ export default function Dashboard() {
     if (!user) return router.push('/')
 
     setUserId(user.id)
+
+    // Fetch Profile
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+    setUserProfile(profile)
+
     fetchGroups()
   }
 
@@ -114,18 +121,51 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen p-4 pb-20 max-w-2xl mx-auto">
-      {/* Modal de Perfil (só aparece se necessário) */}
-      {userId && <ProfileModal userId={userId} onComplete={() => { }} />}
+      {/* 1. Modal for Onboarding (Auto) */}
+      {userId && <ProfileModal userId={userId} onComplete={() => fetchUserAndGroups()} />}
 
-      {/* Cabeçalho */}
+      {/* 2. Modal for Editing (Manual) */}
+      {userId && (
+        <ProfileModal
+          userId={userId}
+          isOpen={showProfileEdit}
+          onClose={() => setShowProfileEdit(false)}
+          onComplete={() => {
+            fetchUserAndGroups()
+            setShowProfileEdit(false)
+          }}
+        />
+      )}
+
+      {/* Header Updated */}
       <header className="flex justify-between items-center mb-8 sticky top-4 z-20 glass-panel p-4 rounded-2xl">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Meus Grupos</h1>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-xl transition shadow-lg shadow-blue-600/20 active:scale-95"
-        >
-          <PlusCircle size={24} />
-        </button>
+        <div>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Meus Grupos</h1>
+          {userProfile && (
+            <p className="text-xs text-slate-500 font-medium">Olá, {userProfile.full_name?.split(' ')[0]}</p>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-xl transition shadow-lg shadow-blue-600/20 active:scale-95"
+          >
+            <PlusCircle size={24} />
+          </button>
+
+          {/* Profile Button */}
+          <button
+            onClick={() => setShowProfileEdit(true)}
+            className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center hover:border-blue-500 transition overflow-hidden"
+          >
+            {userProfile?.avatar_url ? (
+              <img src={userProfile.avatar_url} className="w-full h-full object-cover" />
+            ) : (
+              <UserIcon size={18} className="text-slate-400" />
+            )}
+          </button>
+        </div>
       </header>
 
       {/* Lista de Grupos */}
