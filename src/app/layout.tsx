@@ -2,11 +2,11 @@ import './globals.css'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'], variable: '--font-primary' })
 
 export const metadata: Metadata = {
-  title: 'JuntaAí',
-  description: 'Gerenciador de vaquinhas',
+  title: 'JuntaAí - Gestão de Grupos',
+  description: 'Gerencie vaquinhas e despesas em grupo de forma simples.',
 }
 
 export default function RootLayout({
@@ -16,7 +16,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body className={inter.className}>{children}</body>
+      <body className={`${inter.variable} antialiased selection:bg-blue-500/30 selection:text-white`}>
+        {children}
+      </body>
     </html>
   )
 }
