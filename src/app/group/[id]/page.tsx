@@ -9,6 +9,7 @@ import AddExpenseModal from '../../../components/AddExpenseModal'
 
 interface Member {
   user_id: string
+  goal_amount: number
   profiles: {
     full_name: string
     avatar_url: string
@@ -53,6 +54,9 @@ export default function GroupDetails() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
+  // Individual Goal Editing
+  const [editingGoal, setEditingGoal] = useState<{ userId: string, amount: string } | null>(null)
+
   // Modals
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
@@ -70,6 +74,7 @@ export default function GroupDetails() {
       .channel('group_updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payments', filter: `group_id=eq.${groupId}` }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `group_id=eq.${groupId}` }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, () => loadData()) // Listen for member updates (goals)
       .subscribe()
 
     return () => {
@@ -85,9 +90,9 @@ export default function GroupDetails() {
     const { data: groupData } = await supabase.from('groups').select('*').eq('id', groupId).single()
     setGroup(groupData)
 
-    // 2. Members
+    // 2. Members (Added goal_amount)
     const { data: membersData } = await supabase.from('group_members')
-      .select(`user_id, profiles ( full_name, avatar_url )`)
+      .select(`user_id, goal_amount, profiles ( full_name, avatar_url )`)
       .eq('group_id', groupId)
     if (membersData) setMembers(membersData as any)
 
@@ -116,6 +121,27 @@ export default function GroupDetails() {
       alert('Bem-vindo!')
     } catch (e: any) { alert('Erro: ' + e.message) }
     finally { setLoading(false) }
+  }
+
+  const handleUpdateGoal = async (userId: string, newAmount: string) => {
+    try {
+      const amount = parseFloat(newAmount)
+      if (isNaN(amount)) return
+
+      const { error } = await supabase
+        .from('group_members')
+        .update({ goal_amount: amount })
+        .eq('group_id', groupId)
+        .eq('user_id', userId)
+
+      if (error) throw error
+
+      setEditingGoal(null)
+      loadData() // Refresh
+    } catch (error) {
+      console.error(error)
+      alert('Erro ao atualizar meta.')
+    }
   }
 
   const handleReportPayment = async (e: React.FormEvent) => {
@@ -314,23 +340,88 @@ export default function GroupDetails() {
       {/* Members */}
       <div className="glass-panel p-6 rounded-3xl">
         <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">Participantes ({members.length})</h3>
-        <div className="space-y-4">
+        <div className="space-y-6">
           {members.map(m => {
             const total = payments.filter(p => p.user_id === m.user_id && p.status === 'CONFIRMED').reduce((a, b) => a + b.amount, 0)
+            const goal = m.goal_amount || 0
+            const progress = goal > 0 ? (total / goal) * 100 : 0
+
             return (
-              <div key={m.user_id} className="flex items-center justify-between border-b border-white/5 pb-4 last:border-0 last:pb-0">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center text-slate-500 overflow-hidden border-2 border-slate-700/50">
-                    {m.profiles?.avatar_url ? <img src={m.profiles.avatar_url} className="w-full h-full object-cover" /> : <User size={24} />}
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-200">{m.profiles?.full_name || 'Sem nome'}</p>
-                    <div className="flex items-center gap-2">
-                      {group.owner_id === m.user_id && <span className="text-[10px] font-bold text-blue-400 bg-blue-400/10 px-2 rounded-full">OWNER</span>}
-                      {total > 0 && <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-2 rounded-full">+ R$ {total.toFixed(2)}</span>}
+              <div key={m.user_id} className="border-b border-white/5 pb-6 last:border-0 last:pb-0">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center text-slate-500 overflow-hidden border-2 border-slate-700/50">
+                      {m.profiles?.avatar_url ? <img src={m.profiles.avatar_url} className="w-full h-full object-cover" /> : <User size={24} />}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-200">{m.profiles?.full_name || 'Sem nome'}</p>
+                      <div className="flex items-center gap-2">
+                        {group.owner_id === m.user_id && <span className="text-[10px] font-bold text-blue-400 bg-blue-400/10 px-2 rounded-full">OWNER</span>}
+                        {goal > 0 && <span className="text-[10px] font-bold text-slate-400">Meta: R$ {goal.toLocaleString('pt-BR')}</span>}
+                      </div>
                     </div>
                   </div>
+
+                  {/* Admin Actions for Goal */}
+                  {isOwner ? (
+                    editingGoal?.userId === m.user_id ? (
+                      <div className="flex items-center gap-2 animate-in fade-in">
+                        <input
+                          autoFocus
+                          type="number"
+                          className="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-emerald-500"
+                          placeholder="0.00"
+                          value={editingGoal.amount}
+                          onChange={(e) => setEditingGoal({ ...editingGoal, amount: e.target.value })}
+                        />
+                        <button
+                          onClick={() => handleUpdateGoal(m.user_id, editingGoal.amount)}
+                          className="bg-emerald-500 text-white p-1 rounded-lg hover:bg-emerald-600 transition"
+                        >
+                          <CheckCircle size={16} />
+                        </button>
+                        <button
+                          onClick={() => setEditingGoal(null)}
+                          className="bg-slate-700 text-slate-300 p-1 rounded-lg hover:bg-slate-600 transition"
+                        >
+                          <XCircle size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setEditingGoal({ userId: m.user_id, amount: m.goal_amount?.toString() || '' })}
+                        className="text-slate-500 hover:text-emerald-400 transition"
+                        title="Definir Meta Individual"
+                      >
+                        <TrendingDown size={18} className="rotate-180" /> {/* Using TrendingDown rotated as Target icon replacement */}
+                      </button>
+                    )
+                  ) : null}
                 </div>
+
+                {/* Progress Bar (Only if goal exists) */}
+                {goal > 0 && (
+                  <div className="relative pt-1">
+                    <div className="flex mb-2 items-center justify-between text-xs">
+                      <span className={`font-bold ${total >= goal ? 'text-emerald-400' : 'text-slate-400'}`}>
+                        {total >= goal ? 'Meta Batida! 🎉' : `R$ ${total.toLocaleString('pt-BR')} pago`}
+                      </span>
+                      <span className="text-slate-500 font-bold">{progress.toFixed(0)}%</span>
+                    </div>
+                    <div className="overflow-hidden h-2 mb-2 text-xs flex rounded-full bg-slate-800">
+                      <div
+                        style={{ width: `${Math.min(progress, 100)}%` }}
+                        className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-1000 ${total >= goal ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Fallback Display if no goal */}
+                {goal === 0 && total > 0 && (
+                  <p className="text-xs text-emerald-400 font-bold pl-16">+ R$ {total.toFixed(2)} pago</p>
+                )}
+
               </div>
             )
           })}
