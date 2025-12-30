@@ -1,13 +1,14 @@
 'use client'
+
 import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, User, Share2, LogIn } from 'lucide-react'
+import { ArrowLeft, User, Share2, LogIn, Trophy, Copy, Plus, CheckCircle, XCircle, Clock, TrendingDown, FileText } from 'lucide-react'
 import Link from 'next/link'
+import AddExpenseModal from '../../../components/AddExpenseModal'
 
 interface Member {
   user_id: string
-  role: string
   profiles: {
     full_name: string
     avatar_url: string
@@ -22,165 +23,334 @@ interface GroupDetails {
   owner_id: string
 }
 
+interface Payment {
+  id: string
+  amount: number
+  status: 'PENDING' | 'CONFIRMED' | 'REJECTED'
+  created_at: string
+  user_id: string
+  profiles: {
+    full_name: string
+  }
+}
+
+interface Expense {
+  id: string
+  description: string
+  amount: number
+  proof_url: string | null
+  created_at: string
+}
+
 export default function GroupDetails() {
   const params = useParams()
   const groupId = params.id as string
-  
+
   const [group, setGroup] = useState<GroupDetails | null>(null)
   const [members, setMembers] = useState<Member[]>([])
+  const [payments, setPayments] = useState<Payment[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+
+  // Modals
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [showExpenseModal, setShowExpenseModal] = useState(false)
+  const [paymentAmount, setPaymentAmount] = useState('')
 
   useEffect(() => {
     if (groupId) loadData()
   }, [groupId])
 
+  useEffect(() => {
+    if (!groupId) return
+
+    // Realtime subscription
+    const channel = supabase
+      .channel('group_updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments', filter: `group_id=eq.${groupId}` }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `group_id=eq.${groupId}` }, () => loadData())
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [groupId])
+
   const loadData = async () => {
-    // 1. Pega usuário atual
     const { data: { user } } = await supabase.auth.getUser()
     setCurrentUser(user)
 
-    // 2. Pega dados do grupo
-    const { data: groupData } = await supabase
-      .from('groups')
-      .select('*')
-      .eq('id', groupId)
-      .single()
+    // 1. Group
+    const { data: groupData } = await supabase.from('groups').select('*').eq('id', groupId).single()
     setGroup(groupData)
 
-    // 3. Pega membros (agora buscando direto da tabela certa)
-    const { data: membersData } = await supabase
-      .from('group_members')
-      .select(`
-        user_id,
-        role,
-        profiles ( full_name, avatar_url )
-      `)
+    // 2. Members
+    const { data: membersData } = await supabase.from('group_members')
+      .select(`user_id, profiles ( full_name, avatar_url )`)
       .eq('group_id', groupId)
-
     if (membersData) setMembers(membersData as any)
+
+    // 3. Payments
+    const { data: paymentsData } = await supabase.from('payments')
+      .select(`id, amount, status, created_at, user_id, profiles:user_id ( full_name )`)
+      .eq('group_id', groupId)
+      .order('created_at', { ascending: false })
+    if (paymentsData) setPayments(paymentsData as any)
+
+    // 4. Expenses
+    const { data: expensesData } = await supabase.from('expenses')
+      .select('*')
+      .eq('group_id', groupId)
+      .order('created_at', { ascending: false })
+    if (expensesData) setExpenses(expensesData)
   }
 
   const handleJoinGroup = async () => {
-    if (!currentUser) return
+    if (!currentUser) return alert('Faça login para entrar.')
     setLoading(true)
     try {
-      const { error } = await supabase
-        .from('group_members')
-        .insert([{
-          group_id: groupId,
-          user_id: currentUser.id,
-          role: 'member',
-          individual_goal: 0
-        }])
-      
+      const { error } = await supabase.from('group_members').insert([{ group_id: groupId, user_id: currentUser.id }])
       if (error) throw error
-      await loadData() // Recarrega a tela
-      alert('Bem-vindo ao grupo!')
-    } catch (error: any) {
-      alert('Erro ao entrar: ' + error.message)
-    } finally {
-      setLoading(false)
-    }
+      await loadData()
+      alert('Bem-vindo!')
+    } catch (e: any) { alert('Erro: ' + e.message) }
+    finally { setLoading(false) }
   }
 
-  const copyInviteLink = () => {
-    const url = window.location.href
-    navigator.clipboard.writeText(url)
-    alert('Link copiado! Mande para os amigos.')
+  const handleReportPayment = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!paymentAmount) return
+    setLoading(true)
+    try {
+      const { error } = await supabase.from('payments').insert([{ group_id: groupId, user_id: currentUser.id, amount: parseFloat(paymentAmount), status: 'PENDING' }])
+      if (error) throw error
+      alert('Pagamento enviado!')
+      setShowPaymentModal(false)
+      setPaymentAmount('')
+      loadData()
+    } catch (e: any) { alert('Erro: ' + e.message) }
+    finally { setLoading(false) }
   }
 
-  if (!group) return <div className="p-10 text-center">Carregando...</div>
+  const handleConfirmPayment = async (paymentId: string, newStatus: 'CONFIRMED' | 'REJECTED') => {
+    setPayments(prev => prev.map(p => p.id === paymentId ? { ...p, status: newStatus } : p))
+    await supabase.from('payments').update({ status: newStatus }).eq('id', paymentId)
+  }
 
-  // Verifica se eu já estou no grupo
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    alert('Copiado!')
+  }
+
+  if (!group) return <div className="p-10 text-center text-white">Carregando...</div>
+
   const isMember = members.some(m => m.user_id === currentUser?.id)
-  
-  // Calcula totais (simulado por enquanto, depois conectamos transações)
-  const totalArrecadado = 0 
+  const isOwner = group.owner_id === currentUser?.id
+
+  // Totals
+  const totalArrecadado = payments.filter(p => p.status === 'CONFIRMED').reduce((acc, curr) => acc + curr.amount, 0)
+  const totalDespesas = expenses.reduce((acc, curr) => acc + curr.amount, 0)
+  const saldoAtual = totalArrecadado - totalDespesas
   const porcentagemGeral = (totalArrecadado / group.total_goal_amount) * 100
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Cabeçalho Azul */}
-      <div className="bg-blue-600 p-6 pb-12 text-white">
-        <div className="flex justify-between items-start">
-            <Link href="/dashboard" className="inline-flex items-center text-blue-100 mb-4 hover:text-white">
-            <ArrowLeft size={20} className="mr-1" /> Voltar
-            </Link>
-            <button 
-                onClick={copyInviteLink}
-                className="bg-white/20 p-2 rounded-full hover:bg-white/30 transition"
-                title="Copiar Link de Convite"
-            >
-                <Share2 size={20} />
-            </button>
-        </div>
-        
-        <h1 className="text-3xl font-bold">{group.name}</h1>
-        <div className="mt-4 opacity-90">
-            <span className="text-sm">Meta do Grupo</span>
-            <div className="text-3xl font-bold">
-                R$ {group.total_goal_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+    <div className="min-h-screen p-4 pb-20 max-w-2xl mx-auto">
+      {/* Header */}
+      <div className="flex justify-between items-start mb-6">
+        <Link href="/dashboard" className="inline-flex items-center text-slate-400 hover:text-white transition">
+          <ArrowLeft size={20} className="mr-2" /> Voltar
+        </Link>
+        <button onClick={() => copyToClipboard(window.location.href)} className="bg-slate-800/50 p-2 rounded-full hover:bg-slate-700 text-slate-400">
+          <Share2 size={20} />
+        </button>
+      </div>
+
+      {/* Main Card */}
+      <div className="glass-panel p-8 rounded-3xl relative overflow-hidden mb-8">
+        <div className="absolute top-0 right-0 p-8 opacity-5"><Trophy size={160} /></div>
+
+        <div className="relative z-10">
+          <h1 className="text-3xl font-bold text-white mb-2">{group.name}</h1>
+
+          {group.pix_key && (
+            <div className="bg-slate-900/50 p-3 rounded-xl inline-flex items-center gap-3 mb-6 border border-white/5 cursor-pointer hover:bg-slate-900/80 transition" onClick={() => copyToClipboard(group.pix_key)}>
+              <div className="bg-emerald-500/10 p-2 rounded-lg text-emerald-400"><Copy size={16} /></div>
+              <div>
+                <p className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Chave PIX</p>
+                <p className="text-sm font-mono text-emerald-200">{group.pix_key}</p>
+              </div>
             </div>
+          )}
+
+          <div className="flex justify-between items-end mb-8">
+            <div>
+              <p className="text-slate-400 text-sm mb-1">Saldo Arrecadado</p>
+              <div className="text-4xl font-bold text-white">
+                R$ {saldoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </div>
+              {totalDespesas > 0 && (
+                <div className="text-sm text-red-300 mt-1 flex items-center gap-1">
+                  - R$ {totalDespesas.toLocaleString('pt-BR')} em despesas
+                </div>
+              )}
+            </div>
+            <div className="text-right">
+              <p className="text-slate-500 text-xs uppercase font-bold">Meta</p>
+              <p className="text-slate-400 font-bold">R$ {group.total_goal_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs font-bold uppercase tracking-wider text-slate-500">
+              <span>Progresso (Bruto)</span>
+              <span>{porcentagemGeral.toFixed(1)}%</span>
+            </div>
+            <div className="w-full bg-slate-950/50 rounded-full h-3 backdrop-blur-sm">
+              <div className="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${Math.min(porcentagemGeral, 100)}%` }}></div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="px-4 -mt-6 pb-20">
-        {/* Card de Progresso */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <p className="text-gray-500 text-sm font-bold mb-2">PROGRESSO</p>
-          <div className="w-full bg-gray-200 rounded-full h-4">
-            <div 
-              className="bg-green-500 h-4 rounded-full transition-all duration-500" 
-              style={{ width: `${Math.min(porcentagemGeral, 100)}%` }}
-            ></div>
-          </div>
-          <p className="text-right text-sm text-gray-500 mt-1">{porcentagemGeral.toFixed(1)}%</p>
+      {/* Admin Actions */}
+      {isOwner && (
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <button onClick={() => setShowExpenseModal(true)} className="py-4 rounded-xl flex flex-col items-center justify-center gap-2 font-bold bg-slate-800 text-red-400 hover:bg-slate-700 transition border border-red-500/10">
+            <TrendingDown size={24} /> Registrar Saída
+          </button>
+
+          {/* If user is also a member, show contribute button here? Or keep below */}
         </div>
+      )}
 
-        {/* Botão de Entrar (Só aparece se não for membro) */}
-        {!isMember && (
-            <button 
-                onClick={handleJoinGroup}
-                disabled={loading}
-                className="w-full bg-green-600 text-white font-bold py-4 rounded-xl mb-6 shadow-md flex items-center justify-center gap-2 hover:bg-green-700 transition"
-            >
-                <LogIn size={24} />
-                {loading ? 'Entrando...' : 'Participar do Grupo'}
-            </button>
-        )}
+      {/* Member Actions */}
+      {isMember && (
+        <button onClick={() => setShowPaymentModal(true)} className="w-full py-4 rounded-xl mb-8 flex items-center justify-center gap-2 font-bold bg-gradient-to-r from-emerald-600 to-green-500 hover:from-emerald-500 text-white shadow-lg shadow-emerald-900/20 active:scale-95 transition">
+          <Plus size={20} /> Informar Pagamento (Entrada)
+        </button>
+      )}
 
-        {/* Lista de Participantes */}
-        <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            Participantes <span className="text-xs bg-gray-100 px-2 py-1 rounded-full">{members.length}</span>
-        </h3>
-        
-        <div className="space-y-4">
-          {members.map((member) => (
-            <div key={member.user_id} className="flex items-center justify-between border-b border-gray-100 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 overflow-hidden">
-                    {member.profiles?.avatar_url ? (
-                        <img src={member.profiles.avatar_url} alt="Avatar" className="w-full h-full object-cover"/>
-                    ) : (
-                        <User size={20} />
-                    )}
-                </div>
+      {!isMember && (
+        <button onClick={handleJoinGroup} disabled={loading} className="w-full btn-primary py-4 rounded-xl mb-8 flex items-center justify-center gap-2 font-bold">
+          <LogIn size={20} /> Entrar no Grupo
+        </button>
+      )}
+
+
+      {/* Admin: Approvals */}
+      {isOwner && payments.some(p => p.status === 'PENDING') && (
+        <div className="bg-orange-500/10 border border-orange-500/20 p-6 rounded-3xl mb-8">
+          <h3 className="text-lg font-bold text-orange-200 mb-4 flex items-center gap-2"><Clock size={20} /> Aprovações Pendentes</h3>
+          <div className="space-y-3">
+            {payments.filter(p => p.status === 'PENDING').map(p => (
+              <div key={p.id} className="bg-slate-900/50 p-4 rounded-xl flex items-center justify-between border border-white/5">
                 <div>
-                  <p className="font-medium text-gray-900">
-                    {member.profiles?.full_name || 'Usuário sem nome'}
-                     {member.role === 'admin' && <span className="text-xs text-blue-500 ml-2">(Admin)</span>}
-                  </p>
+                  <p className="font-bold text-white text-lg">R$ {p.amount.toFixed(2)}</p>
+                  <p className="text-xs text-slate-400">{p.profiles?.full_name}</p>
                 </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleConfirmPayment(p.id, 'CONFIRMED')} className="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold">Aprovar</button>
+                  <button onClick={() => handleConfirmPayment(p.id, 'REJECTED')} className="bg-red-500/20 text-red-300 px-4 py-2 rounded-lg text-sm font-bold">Recusar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Expenses List */}
+      <div className="glass-panel p-6 rounded-3xl mb-8">
+        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+          Despesas / Saídas <span className="text-xs bg-slate-800 px-2 py-1 rounded-full text-slate-400">{expenses.length}</span>
+        </h3>
+        <div className="space-y-4">
+          {expenses.map(e => (
+            <div key={e.id} className="flex items-center justify-between border-b border-white/5 pb-4 last:border-0 last:pb-0">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400"><TrendingDown size={18} /></div>
+                <div>
+                  <p className="font-bold text-slate-200">{e.description}</p>
+                  <p className="text-xs text-slate-500">{new Date(e.created_at).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-red-400">- R$ {e.amount.toFixed(2)}</p>
+                {e.proof_url && (
+                  <a href={e.proof_url} target="_blank" className="text-[10px] text-blue-400 hover:underline flex items-center justify-end gap-1"><FileText size={10} /> Ver Nota</a>
+                )}
               </div>
             </div>
           ))}
-          
-          {members.length === 0 && (
-              <p className="text-gray-400 text-sm text-center py-4">Nenhum participante ainda.</p>
-          )}
+          {expenses.length === 0 && <p className="text-center text-slate-500 text-sm">Nenhuma despesa registrada.</p>}
         </div>
       </div>
+
+      {/* Incoming History */}
+      <div className="glass-panel p-6 rounded-3xl mb-8">
+        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+          Entradas Recentes <span className="text-xs bg-slate-800 px-2 py-1 rounded-full text-slate-400">{payments.filter(p => p.status !== 'PENDING').length}</span>
+        </h3>
+        <div className="space-y-4">
+          {payments.filter(p => p.status !== 'PENDING').map(p => (
+            <div key={p.id} className="flex items-center justify-between border-b border-white/5 pb-4 last:border-0 last:pb-0">
+              <div className="flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${p.status === 'CONFIRMED' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
+                  {p.status === 'CONFIRMED' ? <CheckCircle size={18} /> : <XCircle size={18} />}
+                </div>
+                <div>
+                  <p className="font-bold text-slate-200">R$ {p.amount.toFixed(2)}</p>
+                  <p className="text-xs text-slate-500">{p.profiles?.full_name} • {new Date(p.created_at).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md ${p.status === 'CONFIRMED' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                {p.status === 'CONFIRMED' ? 'Pago' : 'Recusado'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Members */}
+      <div className="glass-panel p-6 rounded-3xl">
+        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">Participantes ({members.length})</h3>
+        <div className="space-y-4">
+          {members.map(m => {
+            const total = payments.filter(p => p.user_id === m.user_id && p.status === 'CONFIRMED').reduce((a, b) => a + b.amount, 0)
+            return (
+              <div key={m.user_id} className="flex items-center justify-between border-b border-white/5 pb-4 last:border-0 last:pb-0">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center text-slate-500 overflow-hidden border-2 border-slate-700/50">
+                    {m.profiles?.avatar_url ? <img src={m.profiles.avatar_url} className="w-full h-full object-cover" /> : <User size={24} />}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-200">{m.profiles?.full_name || 'Sem nome'}</p>
+                    <div className="flex items-center gap-2">
+                      {group.owner_id === m.user_id && <span className="text-[10px] font-bold text-blue-400 bg-blue-400/10 px-2 rounded-full">OWNER</span>}
+                      {total > 0 && <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-2 rounded-full">+ R$ {total.toFixed(2)}</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <AddExpenseModal isOpen={showExpenseModal} onClose={() => setShowExpenseModal(false)} groupId={groupId} onSuccess={loadData} />
+
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
+          <div className="glass-panel w-full max-w-sm p-6 rounded-3xl relative animate-in zoom-in-95">
+            <button onClick={() => setShowPaymentModal(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white"><XCircle size={24} /></button>
+            <h3 className="text-xl font-bold text-white mb-1">Informar Pagamento</h3>
+            <form onSubmit={handleReportPayment} className="mt-4">
+              <input autoFocus type="number" step="0.01" required className="glass-input w-full p-4 text-2xl font-bold text-emerald-400 rounded-xl mb-4" placeholder="0,00" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} />
+              <button disabled={loading} className="btn-primary w-full py-4 rounded-xl font-bold justify-center">{loading ? '...' : 'Confirmar'}</button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
