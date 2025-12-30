@@ -61,6 +61,8 @@ export default function GroupDetails() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState('')
+  const [showAllExpenses, setShowAllExpenses] = useState(false)
+  const [showAllPayments, setShowAllPayments] = useState(false)
 
   useEffect(() => {
     if (groupId) loadData()
@@ -291,7 +293,7 @@ export default function GroupDetails() {
           Despesas / Saídas <span className="text-xs bg-slate-800 px-2 py-1 rounded-full text-slate-400">{expenses.length}</span>
         </h3>
         <div className="space-y-4">
-          {expenses.map(e => (
+          {(showAllExpenses ? expenses : expenses.slice(0, 5)).map(e => (
             <div key={e.id} className="flex items-center justify-between border-b border-white/5 pb-4 last:border-0 last:pb-0">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400"><TrendingDown size={18} /></div>
@@ -309,6 +311,15 @@ export default function GroupDetails() {
             </div>
           ))}
           {expenses.length === 0 && <p className="text-center text-slate-500 text-sm">Nenhuma despesa registrada.</p>}
+
+          {expenses.length > 5 && (
+            <button
+              onClick={() => setShowAllExpenses(!showAllExpenses)}
+              className="w-full pt-4 pb-2 text-sm text-slate-400 hover:text-white transition font-bold flex items-center justify-center gap-2"
+            >
+              {showAllExpenses ? 'Recolher' : `Ver todas (${expenses.length})`}
+            </button>
+          )}
         </div>
       </div>
 
@@ -318,7 +329,7 @@ export default function GroupDetails() {
           Entradas Recentes <span className="text-xs bg-slate-800 px-2 py-1 rounded-full text-slate-400">{payments.filter(p => p.status !== 'PENDING').length}</span>
         </h3>
         <div className="space-y-4">
-          {payments.filter(p => p.status !== 'PENDING').map(p => (
+          {(showAllPayments ? payments.filter(p => p.status !== 'PENDING') : payments.filter(p => p.status !== 'PENDING').slice(0, 5)).map(p => (
             <div key={p.id} className="flex items-center justify-between border-b border-white/5 pb-4 last:border-0 last:pb-0">
               <div className="flex items-center gap-4">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${p.status === 'CONFIRMED' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
@@ -334,6 +345,15 @@ export default function GroupDetails() {
               </span>
             </div>
           ))}
+
+          {payments.filter(p => p.status !== 'PENDING').length > 5 && (
+            <button
+              onClick={() => setShowAllPayments(!showAllPayments)}
+              className="w-full pt-4 pb-2 text-sm text-slate-400 hover:text-white transition font-bold flex items-center justify-center gap-2"
+            >
+              {showAllPayments ? 'Recolher' : `Ver todas (${payments.filter(p => p.status !== 'PENDING').length})`}
+            </button>
+          )}
         </div>
       </div>
 
