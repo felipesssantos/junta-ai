@@ -206,9 +206,30 @@ export default function GroupDetails() {
     await supabase.from('payments').update({ status: newStatus }).eq('id', paymentId)
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    alert('Copiado!')
+  const handleShare = async () => {
+    if (!group) return
+
+    // Recalculate totals for the message (since they are defined below in render, we duplicate logic or simple recalc)
+    const totalArr = payments.filter(p => p.status === 'CONFIRMED').reduce((acc, curr) => acc + curr.amount, 0)
+    const percent = (totalArr / group.total_goal_amount) * 100
+
+    const shareData = {
+      title: `Participe do grupo ${group.name}`,
+      text: `🏆 *${group.name}*\n\n💰 Meta: R$ ${group.total_goal_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n📈 Já arrecadamos: R$ ${totalArr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${percent.toFixed(0)}%)\n\nBora participar? 👇\n`,
+      url: window.location.href
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData)
+      } catch (err) {
+        console.error('Error sharing', err)
+      }
+    } else {
+      const textToCopy = `${shareData.text}${shareData.url}`
+      await navigator.clipboard.writeText(textToCopy)
+      alert('Resumo copiado! Cole no WhatsApp.')
+    }
   }
 
   if (!group) return <div className="p-10 text-center text-white">Carregando...</div>
@@ -229,7 +250,7 @@ export default function GroupDetails() {
         <Link href="/dashboard" className="inline-flex items-center text-slate-400 hover:text-white transition">
           <ArrowLeft size={20} className="mr-2" /> Voltar
         </Link>
-        <button onClick={() => copyToClipboard(window.location.href)} className="bg-slate-800/50 p-2 rounded-full hover:bg-slate-700 text-slate-400">
+        <button onClick={handleShare} className="bg-slate-800/50 p-2 rounded-full hover:bg-slate-700 text-slate-400">
           <Share2 size={20} />
         </button>
       </div>
