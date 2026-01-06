@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { ArrowLeft, User, Share2, LogIn, Trophy, Copy, Plus, CheckCircle, XCircle, Clock, TrendingDown, FileText } from 'lucide-react'
 import Link from 'next/link'
 import AddExpenseModal from '../../../components/AddExpenseModal'
+import imageCompression from 'browser-image-compression'
 
 interface Member {
   user_id: string
@@ -29,6 +30,7 @@ interface Payment {
   id: string
   amount: number
   status: 'PENDING' | 'CONFIRMED' | 'REJECTED'
+  proof_url: string | null
   created_at: string
   user_id: string
   profiles: {
@@ -62,6 +64,7 @@ export default function GroupDetails() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentProof, setPaymentProof] = useState<File | null>(null)
   const [showAllExpenses, setShowAllExpenses] = useState(false)
   const [showAllPayments, setShowAllPayments] = useState(false)
 
@@ -101,7 +104,7 @@ export default function GroupDetails() {
 
     // 3. Payments
     const { data: paymentsData } = await supabase.from('payments')
-      .select(`id, amount, status, created_at, user_id, profiles:user_id ( full_name )`)
+      .select(`id, amount, status, proof_url, created_at, user_id, profiles:user_id ( full_name )`)
       .eq('group_id', groupId)
       .order('created_at', { ascending: false })
     if (paymentsData) setPayments(paymentsData as any)
@@ -151,12 +154,48 @@ export default function GroupDetails() {
     e.preventDefault()
     if (!paymentAmount) return
     setLoading(true)
+
     try {
-      const { error } = await supabase.from('payments').insert([{ group_id: groupId, user_id: currentUser.id, amount: parseFloat(paymentAmount), status: 'PENDING' }])
+      let proofUrl = null
+
+      if (paymentProof) {
+        // Compress
+        const compressedFile = await imageCompression(paymentProof, {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1280,
+          useWebWorker: true
+        })
+
+        // Upload
+        const fileExt = paymentProof.name.split('.').pop()
+        const fileName = `payments/${currentUser.id}/${Date.now()}.${fileExt}`
+
+        const { error: uploadError } = await supabase.storage
+          .from('expense-proofs')
+          .upload(fileName, compressedFile)
+
+        if (uploadError) throw uploadError
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('expense-proofs')
+          .getPublicUrl(fileName)
+
+        proofUrl = publicUrl
+      }
+
+      const { error } = await supabase.from('payments').insert([{
+        group_id: groupId,
+        user_id: currentUser.id,
+        amount: parseFloat(paymentAmount),
+        status: 'PENDING',
+        proof_url: proofUrl
+      }])
+
       if (error) throw error
       alert('Pagamento enviado!')
       setShowPaymentModal(false)
       setPaymentAmount('')
+      setPaymentProof(null)
       loadData()
     } catch (e: any) { alert('Erro: ' + e.message) }
     finally { setLoading(false) }
@@ -277,6 +316,9 @@ export default function GroupDetails() {
                 <div>
                   <p className="font-bold text-white text-lg">R$ {p.amount.toFixed(2)}</p>
                   <p className="text-xs text-slate-400">{p.profiles?.full_name}</p>
+                  {p.proof_url && (
+                    <a href={p.proof_url} target="_blank" className="text-[10px] text-blue-400 hover:text-blue-300 underline block mt-1">Ver Comprovante</a>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => handleConfirmPayment(p.id, 'CONFIRMED')} className="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold">Aprovar</button>
@@ -339,6 +381,9 @@ export default function GroupDetails() {
                 <div>
                   <p className="font-bold text-slate-200">R$ {p.amount.toFixed(2)}</p>
                   <p className="text-xs text-slate-500">{p.profiles?.full_name} • {new Date(p.created_at).toLocaleDateString()}</p>
+                  {p.proof_url && (
+                    <a href={p.proof_url} target="_blank" className="text-[10px] text-blue-400 hover:text-blue-300 underline flex items-center gap-1 mt-0.5"><FileText size={10} /> Ver Comprovante</a>
+                  )}
                 </div>
               </div>
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md ${p.status === 'CONFIRMED' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
@@ -459,7 +504,24 @@ export default function GroupDetails() {
             <h3 className="text-xl font-bold text-white mb-1">Informar Pagamento</h3>
             <form onSubmit={handleReportPayment} className="mt-4">
               <input autoFocus type="number" step="0.01" required className="glass-input w-full p-4 text-2xl font-bold text-emerald-400 rounded-xl mb-4" placeholder="0,00" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} />
-              <button disabled={loading} className="btn-primary w-full py-4 rounded-xl font-bold justify-center">{loading ? '...' : 'Confirmar'}</button>
+
+              <label className="block mb-4">
+                <span className="text-xs font-bold text-slate-400 uppercase">Comprovante (Opcional)</span>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="block w-full text-sm text-slate-400 mt-1
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-slate-800 file:text-blue-400
+                    hover:file:bg-slate-700
+                  "
+                  onChange={e => e.target.files && setPaymentProof(e.target.files[0])}
+                />
+              </label>
+
+              <button disabled={loading} className="btn-primary w-full py-4 rounded-xl font-bold justify-center">{loading ? 'Enviando...' : 'Confirmar'}</button>
             </form>
           </div>
         </div>
