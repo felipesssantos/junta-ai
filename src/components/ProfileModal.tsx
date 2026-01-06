@@ -19,6 +19,7 @@ export default function ProfileModal({
     const [internalIsOpen, setInternalIsOpen] = useState(false)
     const [fullName, setFullName] = useState('')
     const [phone, setPhone] = useState('')
+    const [email, setEmail] = useState('')
     const [loading, setLoading] = useState(false)
     const [fetching, setFetching] = useState(true)
 
@@ -41,6 +42,7 @@ export default function ProfileModal({
         if (data) {
             setFullName(data.full_name || '')
             setPhone(data.phone || '')
+            setEmail(data.email || '')
         }
 
         // Logic for auto-open (Onboarding)
@@ -120,6 +122,19 @@ export default function ProfileModal({
                                     placeholder="Ex: Ana Silva"
                                     value={fullName}
                                     onChange={e => setFullName(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-2 block">E-mail</label>
+                            <div className="relative">
+                                <User size={20} className="absolute left-3 top-3.5 text-slate-500" />
+                                <input
+                                    type="email"
+                                    disabled
+                                    className="glass-input w-full p-3 pl-10 rounded-xl opacity-50 cursor-not-allowed"
+                                    value={email}
                                 />
                             </div>
                         </div>

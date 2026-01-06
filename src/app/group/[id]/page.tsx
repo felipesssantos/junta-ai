@@ -13,6 +13,7 @@ interface Member {
   profiles: {
     full_name: string
     avatar_url: string
+    email: string
   }
 }
 
@@ -94,7 +95,7 @@ export default function GroupDetails() {
 
     // 2. Members (Added goal_amount)
     const { data: membersData } = await supabase.from('group_members')
-      .select(`user_id, goal_amount, profiles ( full_name, avatar_url )`)
+      .select(`user_id, goal_amount, profiles ( full_name, avatar_url, email )`)
       .eq('group_id', groupId)
     if (membersData) setMembers(membersData as any)
 
@@ -375,6 +376,7 @@ export default function GroupDetails() {
                     </div>
                     <div>
                       <p className="font-bold text-slate-200">{m.profiles?.full_name || 'Sem nome'}</p>
+                      {m.profiles?.email && <p className="text-[10px] text-slate-500">{m.profiles.email}</p>}
                       <div className="flex items-center gap-2">
                         {group.owner_id === m.user_id && <span className="text-[10px] font-bold text-blue-400 bg-blue-400/10 px-2 rounded-full">OWNER</span>}
                         {goal > 0 && <span className="text-[10px] font-bold text-slate-400">Meta: R$ {goal.toLocaleString('pt-BR')}</span>}
