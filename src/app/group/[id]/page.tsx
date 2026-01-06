@@ -232,6 +232,11 @@ export default function GroupDetails() {
     }
   }
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    alert('Copiado!')
+  }
+
   if (!group) return <div className="p-10 text-center text-white">Carregando...</div>
 
   const isMember = members.some(m => m.user_id === currentUser?.id)
