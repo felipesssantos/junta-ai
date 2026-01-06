@@ -224,17 +224,53 @@ export default function GroupDetails() {
         await navigator.share(shareData)
       } catch (err) {
         console.error('Error sharing', err)
+        // If user cancelled (AbortError), do nothing.
+        // If other error, maybe try copy? sticking to doing nothing for now to avoid annoyance.
       }
     } else {
       const textToCopy = `${shareData.text}${shareData.url}`
-      await navigator.clipboard.writeText(textToCopy)
-      alert('Resumo copiado! Cole no WhatsApp.')
+      copyToClipboard(textToCopy)
     }
   }
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    alert('Copiado!')
+    // 1. Try Modern API (Requires HTTPS)
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text)
+        .then(() => alert('Copiado!'))
+        .catch(err => {
+          console.error('Async: Could not copy text: ', err)
+          fallbackCopyTextToClipboard(text)
+        })
+    } else {
+      // 2. Fallback
+      fallbackCopyTextToClipboard(text)
+    }
+  }
+
+  const fallbackCopyTextToClipboard = (text: string) => {
+    const textArea = document.createElement("textarea")
+    textArea.value = text
+
+    // Avoid scrolling to bottom
+    textArea.style.top = "0"
+    textArea.style.left = "0"
+    textArea.style.position = "fixed"
+
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+
+    try {
+      const successful = document.execCommand('copy')
+      if (successful) alert('Copiado!')
+      else alert('Erro ao copiar. Tente selecionar manualmente.')
+    } catch (err) {
+      console.error('Fallback: Oops, unable to copy', err)
+      alert('Seu navegador não suporta copiar automaticamente.')
+    }
+
+    document.body.removeChild(textArea)
   }
 
   if (!group) return <div className="p-10 text-center text-white">Carregando...</div>
