@@ -273,7 +273,6 @@ export default function Dashboard() {
                   value={newPixKey}
                   onChange={e => setNewPixKey(e.target.value)}
                 />
-                />
               </div>
 
               <div>

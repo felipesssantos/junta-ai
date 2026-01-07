@@ -25,6 +25,7 @@ interface GroupDetails {
   total_goal_amount: number
   pix_key: string
   owner_id: string
+  category?: string
 }
 
 interface Payment {
