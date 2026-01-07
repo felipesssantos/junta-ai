@@ -8,6 +8,7 @@ import Link from 'next/link'
 import AddExpenseModal from '../../../components/AddExpenseModal'
 import imageCompression from 'browser-image-compression'
 import AdBanner from '../../../components/AdBanner'
+import { getPresignedUrl } from '../../../actions/storage'
 
 interface Member {
   user_id: string
@@ -168,19 +169,21 @@ export default function GroupDetails() {
           useWebWorker: true
         })
 
-        // Upload
+        // Upload (MinIO)
         const fileExt = paymentProof.name.split('.').pop()
         const fileName = `payments/${currentUser.id}/${Date.now()}.${fileExt}`
 
-        const { error: uploadError } = await supabase.storage
-          .from('expense-proofs')
-          .upload(fileName, compressedFile)
+        // 1. Get Presigned URL
+        const { presignedUrl, publicUrl } = await getPresignedUrl(fileName)
 
-        if (uploadError) throw uploadError
+        // 2. Upload directly to MinIO
+        const uploadRes = await fetch(presignedUrl, {
+          method: 'PUT',
+          body: compressedFile,
+          headers: { 'Content-Type': compressedFile.type }
+        })
 
-        const { data: { publicUrl } } = supabase.storage
-          .from('expense-proofs')
-          .getPublicUrl(fileName)
+        if (!uploadRes.ok) throw new Error('Falha no upload do comprovante')
 
         proofUrl = publicUrl
       }

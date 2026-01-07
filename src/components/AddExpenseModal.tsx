@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { X, Upload, Check, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import imageCompression from 'browser-image-compression'
+import { getPresignedUrl } from '../actions/storage'
 
 interface AddExpenseModalProps {
     isOpen: boolean
@@ -69,19 +70,21 @@ export default function AddExpenseModal({ isOpen, onClose, groupId, onSuccess }:
 
             // 1. Upload File (if selected)
             if (file) {
+                // Upload (MinIO)
                 const fileExt = file.name.split('.').pop()
-                const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`
-                const filePath = `${groupId}/${fileName}`
+                const fileName = `receipts/${groupId}/${Date.now()}.${fileExt}`
 
-                const { error: uploadError } = await supabase.storage
-                    .from('expense-proofs')
-                    .upload(filePath, file)
+                // 1. Get Presigned URL
+                const { presignedUrl, publicUrl } = await getPresignedUrl(fileName)
 
-                if (uploadError) throw uploadError
+                // 2. Upload directly to MinIO
+                const uploadRes = await fetch(presignedUrl, {
+                    method: 'PUT',
+                    body: file,
+                    headers: { 'Content-Type': file.type }
+                })
 
-                const { data: { publicUrl } } = supabase.storage
-                    .from('expense-proofs')
-                    .getPublicUrl(filePath)
+                if (!uploadRes.ok) throw new Error('Falha no upload para o Storage')
 
                 proofUrl = publicUrl
             }
