@@ -7,6 +7,7 @@ import { ArrowLeft, User, Share2, LogIn, Trophy, Copy, Plus, CheckCircle, XCircl
 import Link from 'next/link'
 import AddExpenseModal from '../../../components/AddExpenseModal'
 import imageCompression from 'browser-image-compression'
+import AdBanner from '../../../components/AdBanner'
 
 interface Member {
   user_id: string
@@ -342,6 +343,9 @@ export default function GroupDetails() {
           </div>
         </div>
       </div>
+
+      {/* Contextual Ad Banner */}
+      <AdBanner category={group.category} className="mb-8" />
 
       {/* Admin Actions */}
       {isOwner && (

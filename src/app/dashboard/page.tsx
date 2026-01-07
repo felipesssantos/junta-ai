@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { PlusCircle, Wallet, X, Store, Plane, Home, Users, QrCode, User as UserIcon } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import ProfileModal from '../../components/ProfileModal'
+import AdBanner from '../../components/AdBanner'
 
 interface Group {
   id: string
@@ -19,6 +20,7 @@ export default function Dashboard() {
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupGoal, setNewGroupGoal] = useState('')
   const [newPixKey, setNewPixKey] = useState('')
+  const [newCategory, setNewCategory] = useState('geral')
   const [loading, setLoading] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [userProfile, setUserProfile] = useState<any>(null)
@@ -78,7 +80,7 @@ export default function Dashboard() {
           name: newGroupName,
           total_goal_amount: parseFloat(newGroupGoal),
           owner_id: user.id,
-          category: 'geral',
+          category: newCategory,
           pix_key: newPixKey // Salva a chave PIX
         }])
         .select()
@@ -167,6 +169,9 @@ export default function Dashboard() {
           </button>
         </div>
       </header>
+
+      {/* Ad Banner (Random or Default) */}
+      <AdBanner variant="compact" className="mb-8" />
 
       {/* Lista de Grupos */}
       <div className="grid gap-4">
@@ -268,6 +273,23 @@ export default function Dashboard() {
                   value={newPixKey}
                   onChange={e => setNewPixKey(e.target.value)}
                 />
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-400 ml-1 mb-2 block uppercase tracking-wide">Categoria</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {['geral', 'viagem', 'casa', 'compras', 'outros'].map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setNewCategory(cat)}
+                      className={`p-3 rounded-xl border text-sm font-bold capitalize transition ${newCategory === cat ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'}`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <button
