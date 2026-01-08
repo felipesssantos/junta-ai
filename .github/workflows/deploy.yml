@@ -67,10 +67,12 @@ jobs:
             # We map port 3000 to host.
             # Limits: 512MB RAM, 50% CPU
             # Network: Host (Solves NAT Loopback issues)
+            # Env: Inject secrets at runtime
             docker run -d \
               --name junta-ai \
               --restart unless-stopped \
               --network host \
+              --env-file .env.local \
               --memory="512m" \
               --cpus="0.5" \
               junta-ai-image
