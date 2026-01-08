@@ -61,9 +61,7 @@ jobs:
             docker stop junta-ai || true
             docker rm junta-ai || true
             
-            # 0. Ensure PM2 is stopped (Legacy cleanup)
-            pm2 delete junta-ai || true
-            
+                        
             # 3. Run Container
             # Restart policy ensures it starts on boot.
             # Network: Host (Solves NAT Loopback issues)
