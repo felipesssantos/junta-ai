@@ -1,0 +1,56 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+          MINIO_PORT: ${{ secrets.MINIO_PORT }}
+          MINIO_USE_SSL: ${{ secrets.MINIO_USE_SSL }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
+          NEXT_PUBLIC_MINIO_URL: ${{ secrets.NEXT_PUBLIC_MINIO_URL }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,MINIO_ENDPOINT,MINIO_PORT,MINIO_USE_SSL,MINIO_ACCESS_KEY,MINIO_SECRET_KEY,MINIO_BUCKET_NAME,NEXT_PUBLIC_MINIO_URL
+          script: |
+            # Navigate to project
+            cd ~/junta-ai
+            
+            # Create .env.local from Secrets
+            echo "NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL" > .env.local
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY" >> .env.local
+            echo "" >> .env.local
+            echo "# MinIO Configuration" >> .env.local
+            echo "MINIO_ENDPOINT=$MINIO_ENDPOINT" >> .env.local
+            echo "MINIO_PORT=$MINIO_PORT" >> .env.local
+            echo "MINIO_USE_SSL=$MINIO_USE_SSL" >> .env.local
+            echo "MINIO_ACCESS_KEY=$MINIO_ACCESS_KEY" >> .env.local
+            echo "MINIO_SECRET_KEY=$MINIO_SECRET_KEY" >> .env.local
+            echo "MINIO_BUCKET_NAME=$MINIO_BUCKET_NAME" >> .env.local
+            echo "NEXT_PUBLIC_MINIO_URL=$NEXT_PUBLIC_MINIO_URL" >> .env.local
+
+            # Rest of the pipeline
+            git pull origin main
+            
+            # Install dependencies
+            pnpm install
+            
+            # Build
+            pnpm build
+            
+            # Restart PM2
+            pm2 restart junta-ai || pm2 start ecosystem.config.js
