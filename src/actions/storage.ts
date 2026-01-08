@@ -1,9 +1,10 @@
 'use server'
 
-import { minioClient, bucketName } from '../lib/minio'
+import { minioClient, minioSigner, bucketName } from '../lib/minio'
 
 export async function getPresignedUrl(filename: string) {
     try {
+        // Admin Ops: Use Internal Client (Connectivity Check)
         const exists = await minioClient.bucketExists(bucketName)
         if (!exists) {
             await minioClient.makeBucket(bucketName, 'us-east-1')
@@ -23,16 +24,8 @@ export async function getPresignedUrl(filename: string) {
             await minioClient.setBucketPolicy(bucketName, JSON.stringify(policy))
         }
 
-        // Presigned PUT URL (valid for 15 mins)
-        // Note: minioClient uses the internal endpoint to sign, so the result might have 127.0.0.1
-        const rawPresignedUrl = await minioClient.presignedPutObject(bucketName, filename, 15 * 60)
-
-        // Ensure the returned URL uses the PUBLIC domain
-        const publicHost = new URL(process.env.NEXT_PUBLIC_MINIO_URL!).hostname
-        const presignedUrl = rawPresignedUrl
-            .replace('127.0.0.1', publicHost)
-            .replace('localhost', publicHost)
-            .replace(process.env.MINIO_INTERNAL_ENDPOINT || '127.0.0.1', publicHost)
+        // Signing Ops: Use Public Client (Correct Host Header Signature)
+        const presignedUrl = await minioSigner.presignedPutObject(bucketName, filename, 15 * 60)
 
         // Public URL for storing in DB
         const publicUrl = `${process.env.NEXT_PUBLIC_MINIO_URL}/${filename}`
