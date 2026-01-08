@@ -1,9 +1,10 @@
 'use server'
 
-import { minioClient, bucketName } from '../lib/minio'
+import { minioClient, minioSigner, bucketName } from '../lib/minio'
 
 export async function getPresignedUrl(filename: string) {
     try {
+        // Admin Ops: Use Internal Client (Connectivity Check)
         const exists = await minioClient.bucketExists(bucketName)
         if (!exists) {
             await minioClient.makeBucket(bucketName, 'us-east-1')
@@ -23,8 +24,8 @@ export async function getPresignedUrl(filename: string) {
             await minioClient.setBucketPolicy(bucketName, JSON.stringify(policy))
         }
 
-        // Presigned PUT URL (valid for 15 mins)
-        const presignedUrl = await minioClient.presignedPutObject(bucketName, filename, 15 * 60)
+        // Signing Ops: Use Public Client (Correct Host Header Signature)
+        const presignedUrl = await minioSigner.presignedPutObject(bucketName, filename, 15 * 60)
 
         // Public URL for storing in DB
         const publicUrl = `${process.env.NEXT_PUBLIC_MINIO_URL}/${filename}`
@@ -32,7 +33,7 @@ export async function getPresignedUrl(filename: string) {
         return { presignedUrl, publicUrl }
     } catch (error: any) {
         console.error('MinIO Error:', error)
-        // Fallback? No, just throw
-        throw new Error('Failed to get storage URL')
+        // Return error to client instead of crashing
+        return { error: error.message || 'Falha ao conectar no Storage' }
     }
 }
