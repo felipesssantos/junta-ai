@@ -47,11 +47,24 @@ jobs:
             # Rest of the pipeline
             git pull origin main
             
-            # Install dependencies
-            pnpm install
+            # --- Docker Build & Deploy ---
             
-            # Build
-            pnpm build
+            # 1. Stop and remove old container (if exists)
+            docker stop junta-ai || true
+            docker rm junta-ai || true
             
-            # Restart PM2
-            pm2 restart junta-ai || pm2 start ecosystem.config.js
+            # 2. Build Image (Uses .env.local generated above)
+            # Note: We build on the VPS directly. 
+            docker build -t junta-ai-image .
+            
+            # 3. Run Container
+            # Restart policy ensures it starts on boot.
+            # We map port 3000 to host.
+            docker run -d \
+              --name junta-ai \
+              --restart unless-stopped \
+              -p 3000:3000 \
+              junta-ai-image
+            
+            # Cleanup unused images to save space
+            docker image prune -f
