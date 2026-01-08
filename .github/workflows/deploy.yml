@@ -49,6 +49,9 @@ jobs:
             
             # --- Docker Build & Deploy ---
             
+            # 0. Ensure PM2 is stopped (Migration from PM2 to Docker)
+            pm2 delete junta-ai || true
+            
             # 1. Stop and remove old container (if exists)
             docker stop junta-ai || true
             docker rm junta-ai || true
