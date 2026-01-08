@@ -33,7 +33,13 @@ export async function getPresignedUrl(filename: string) {
         return { presignedUrl, publicUrl }
     } catch (error: any) {
         console.error('MinIO Error:', error)
+
+        // Debug Info (Check if keys are loaded)
+        const hasAccess = !!process.env.MINIO_ACCESS_KEY
+        const hasSecret = !!process.env.MINIO_SECRET_KEY
+        const debugMsg = `Keys: ${hasAccess ? 'YES' : 'NO'}/${hasSecret ? 'YES' : 'NO'}`
+
         // Return error to client instead of crashing
-        return { error: error.message || 'Falha ao conectar no Storage' }
+        return { error: `${error.message || 'Falha ao conectar'} (${debugMsg})` }
     }
 }
