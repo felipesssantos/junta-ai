@@ -1,36 +1,131 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Junta Aí 🤝💸
 
-## Getting Started
+**Junta Aí** é uma plataforma moderna para gerenciamento de vaquinhas e despesas em grupo. Seja para uma viagem com amigos, o churrasco do fim de semana ou despesas compartilhadas de casa, o Junta Aí facilita o controle de quem pagou o quê e quanto falta para atingir a meta.
 
-First, run the development server:
+## 🚀 Funcionalidades
 
+### Gestão de Grupos
+- **Criação de Grupos**: Crie vaquinhas personalizadas com nome, meta financeira e categoria (Viagem, Casa, Festas, etc).
+- **Categorias Inteligentes**: Ícones e identidade visual adaptados ao tipo do grupo.
+- **Link de Convite**: Compartilhe o link do grupo (via WhatsApp ou copia e cola) para amigos entrarem facilmente.
+
+### Financeiro
+- **Metas Individuais**: Defina quanto cada participante deve contribuir.
+- **Barra de Progresso**: Acompanhe visualmente o progresso de cada membro e do grupo como um todo.
+- **Métricas em Tempo Real**:
+  - **Saldo Arrecadado**: Total confirmado de pagamentos.
+  - **Despesas**: Total gasto com comprovantes.
+  - **Saldo em Caixa**: Valor disponível (Arrecadado - Despesas).
+
+### Auditoria e Transparência
+- **Comprovantes de Pagamento**: Membros enviam comprovantes (imagem/PDF) ao informar pagamento.
+- **Registro de Despesas**: O dono do grupo registra saídas (compras) anexando a nota fiscal.
+- **Storage Seguro (MinIO)**: Todos os arquivos são armazenados localmente em servidor próprio, garantindo privacidade e sem custos de cloud externa.
+
+### Monetização
+- **Anúncios Contextuais**: Banners de parceiros (Booking, Amazon, etc) exibidos com base na categoria do grupo.
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+- **Frontend**: [Next.js 14](https://nextjs.org/) (App Router, Server Actions)
+- **Estilização**: Tailwind CSS + Lucide React (Ícones)
+- **Banco de Dados**: [Supabase](https://supabase.com/) (PostgreSQL + Auth)
+- **Armazenamento**: [MinIO](https://min.io/) (Object Storage S3-compatible self-hosted)
+- **Infraestrutura**:
+  - **Docker & Docker Compose**: Containerização completa da aplicação.
+  - **GitHub Actions**: Pipeline de CI/CD para deploy automático na VPS.
+  - **VPS Linux**: Hospedagem em servidor Ubuntu.
+
+---
+
+## 📦 Como Rodar Localmente
+
+### Pré-requisitos
+- Node.js 18+
+- Docker (opcional, para rodar MinIO localmente)
+
+### 1. Clone o repositório
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/seu-usuario/junta-ai.git
+cd junta-ai
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Configure as Variáveis de Ambiente
+Crie um arquivo `.env.local` na raiz do projeto com as chaves do Supabase e MinIO:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=sua_url_supabase
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_key_supabase
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# MinIO (Storage Local)
+MINIO_ENDPOINT=localhost
+MINIO_PORT=9000
+MINIO_USE_SSL=false
+MINIO_ACCESS_KEY=admin
+MINIO_SECRET_KEY=sua_senha_secreta
+MINIO_BUCKET_NAME=junta-ai-files
+NEXT_PUBLIC_MINIO_URL=http://localhost:9000/junta-ai-files
+```
 
-## Learn More
+### 3. Instale as dependências
+```bash
+npm install
+# ou
+pnpm install
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 4. Rode o Servidor de Desenvolvimento
+```bash
+npm run dev
+```
+Acesse [http://localhost:3000](http://localhost:3000) no seu navegador.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🐳 Deploy com Docker
 
-## Deploy on Vercel
+O projeto está totalmente containerizado. Para rodar a versão de produção localmente ou no servidor:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Build e Run
+```bash
+# Construir a imagem
+docker build -t junta-ai-image .
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Rodar o container (Exemplo com injeção de env via arquivo)
+docker run -d \
+  --name junta-ai \
+  --restart unless-stopped \
+  --network host \
+  --env-file .env.local \
+  --memory="512m" \
+  --cpus="0.5" \
+  junta-ai-image
+```
+
+> **Nota**: Utilizamos `--network host` para facilitar a comunicação entre o container do Next.js e o container do MinIO rodando no mesmo host (localhost).
+
+---
+
+## 🔄 Pipeline de CI/CD
+
+O projeto possui um workflow do GitHub Actions (`.github/workflows/deploy.yml`) configurado para **Deploy Automático** na VPS.
+
+### Fluxo de Deploy:
+1.  **Push** na branch `main`.
+2.  **SSH Action**: O GitHub conecta na VPS via SSH.
+3.  **Configuração**: Cria o arquivo `.env.local` dinamicamente usando GitHub Secrets.
+4.  **Hot Build**: Constrói a nova imagem Docker *antes* de parar o container antigo (Zero Downtime Build).
+5.  **Switch**: Para o container antigo e sobe o novo instantaneamente.
+6.  **Cleanup**: Remove imagens antigas para economizar espaço.
+
+### Segredos Necessários (GitHub Repository Secrets):
+- `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `MINIO_...` (Credenciais do MinIO)
+
+---
+
+Desenvolvido por Felipe Santos.
