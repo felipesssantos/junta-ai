@@ -37,6 +37,8 @@ jobs:
             echo "" >> .env.local
             echo "# MinIO Configuration" >> .env.local
             echo "MINIO_ENDPOINT=$MINIO_ENDPOINT" >> .env.local
+            # Internal Endpoint for Docker-to-Host connectivity
+            echo "MINIO_INTERNAL_ENDPOINT=127.0.0.1" >> .env.local
             echo "MINIO_PORT=$MINIO_PORT" >> .env.local
             echo "MINIO_USE_SSL=$MINIO_USE_SSL" >> .env.local
             echo "MINIO_ACCESS_KEY=$MINIO_ACCESS_KEY" >> .env.local
@@ -64,12 +66,13 @@ jobs:
             # Restart policy ensures it starts on boot.
             # We map port 3000 to host.
             # Limits: 512MB RAM, 50% CPU
+            # Network: Host (Solves NAT Loopback issues)
             docker run -d \
               --name junta-ai \
               --restart unless-stopped \
+              --network host \
               --memory="512m" \
               --cpus="0.5" \
-              -p 3000:3000 \
               junta-ai-image
             
             # Cleanup unused images to save space

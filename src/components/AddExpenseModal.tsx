@@ -75,7 +75,9 @@ export default function AddExpenseModal({ isOpen, onClose, groupId, onSuccess }:
                 const fileName = `receipts/${groupId}/${Date.now()}.${fileExt}`
 
                 // 1. Get Presigned URL
-                const { presignedUrl, publicUrl } = await getPresignedUrl(fileName)
+                const response = await getPresignedUrl(fileName)
+                if (response.error || !response.presignedUrl) throw new Error(response.error || 'Failed to get URL')
+                const { presignedUrl, publicUrl } = response
 
                 // 2. Upload directly to MinIO
                 const uploadRes = await fetch(presignedUrl, {
