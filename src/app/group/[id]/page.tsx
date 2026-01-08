@@ -318,22 +318,29 @@ export default function GroupDetails() {
             </div>
           )}
 
-          <div className="flex justify-between items-end mb-8">
-            <div>
-              <p className="text-slate-400 text-sm mb-1">Saldo Arrecadado</p>
-              <div className="text-4xl font-bold text-white">
-                R$ {saldoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </div>
-              {totalDespesas > 0 && (
-                <div className="text-sm text-red-300 mt-1 flex items-center gap-1">
-                  - R$ {totalDespesas.toLocaleString('pt-BR')} em despesas
-                </div>
-              )}
+          {/* Financial Breakdown Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
+            {/* 1. Saldo Arrecadado (Bruto) */}
+            <div className="bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Saldo Arrecadado</p>
+              <p className="text-xl font-bold text-emerald-400">R$ {totalArrecadado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
             </div>
-            <div className="text-right">
-              <p className="text-slate-500 text-xs uppercase font-bold">Meta</p>
-              <p className="text-slate-400 font-bold">R$ {group.total_goal_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+
+            {/* 2. Despesas */}
+            <div className="bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Despesas</p>
+              <p className="text-xl font-bold text-red-400">R$ {totalDespesas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
             </div>
+
+            {/* 3. Saldo em Caixa (Líquido) */}
+            <div className="bg-blue-600/20 p-4 rounded-2xl border border-blue-500/30">
+              <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wider mb-1">Saldo em Caixa</p>
+              <p className="text-2xl font-bold text-white">R$ {saldoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            </div>
+          </div>
+
+          <div className="flex justify-end mb-2">
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Meta: <span className="text-slate-400">R$ {group.total_goal_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span></p>
           </div>
 
           <div className="space-y-2">
