@@ -51,21 +51,21 @@ jobs:
             
             # --- Docker Build & Deploy ---
             
-            # 0. Ensure PM2 is stopped (Migration from PM2 to Docker)
-            pm2 delete junta-ai || true
-            
-            # 1. Stop and remove old container (if exists)
+            # 1. Build Image (Hot Build)
+            # We build FIRST while the old app is still running (Zero Downtime during build).
+            # If build fails, the old app stays up. Safe!
+            docker build -t junta-ai-image .
+
+            # 2. Stop and remove old container
+            # Only done AFTER we confirm the new image is successfully built.
             docker stop junta-ai || true
             docker rm junta-ai || true
             
-            # 2. Build Image (Uses .env.local generated above)
-            # Note: We build on the VPS directly. 
-            docker build -t junta-ai-image .
+            # 0. Ensure PM2 is stopped (Legacy cleanup)
+            pm2 delete junta-ai || true
             
             # 3. Run Container
             # Restart policy ensures it starts on boot.
-            # We map port 3000 to host.
-            # Limits: 512MB RAM, 50% CPU
             # Network: Host (Solves NAT Loopback issues)
             # Env: Inject secrets at runtime
             docker run -d \
